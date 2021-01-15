@@ -15,7 +15,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 http = requests.Session()
-retries = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+retries = Retry(total=10, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
 http.mount("https://", HTTPAdapter(max_retries=retries))
 
 # TODO: Enable sending diffs.
@@ -25,19 +25,27 @@ def fetch_data(dt, use_cache):
         return fetch_from_cache(dt)
 
     date_str = dt.strftime("%Y-%m-%d")
-    response = http.get(
-        ENDPOINT,
-        params={
-            "country": "US",  # limit to US for now
-            "has_geo": True,  # limit to records that have geographic info attached
-            "date_from": date_str,
-            "date_to": date_str,
-            "limit": MAX_RESULTS_TO_FETCH,
-            "page": 1,  # TODO: Add support for overflow.
-        },
-    )
-    # TODO: catch errors.
-    records = persist_to_cache(dt, response.json()["results"])
+    limit_reached = False
+    page = 1
+    results = []
+    while not limit_reached:
+        response = http.get(
+            ENDPOINT,
+            params={
+                "country": "US",  # limit to US for now
+                "has_geo": True,  # limit to records that have geographic info attached
+                "date_from": date_str,
+                "date_to": date_str,
+                "limit": MAX_RESULTS_TO_FETCH,
+                "page": page,
+            },
+        )
+        # TODO: catch errors.
+        response_json = response.json()
+        results += response_json["results"]
+        limit_reached = response_json["meta"]["found"] <= page * MAX_RESULTS_TO_FETCH
+        page += 1
+    records = persist_to_cache(dt, results)
     return records
 
 
