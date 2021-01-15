@@ -54,7 +54,7 @@ def fetch_data(dt, use_cache):
             break
 
     records = persist_to_cache(dt, results)
-    return records
+    return [transform_record(record) for record in records]
 
 
 def record_key(record):
@@ -84,3 +84,12 @@ def persist_to_cache(dt, records):
 def fetch_from_cache(dt):
     with shelve.open(filename(dt)) as db:
         return list(db.values())
+
+def transform_record(record):
+    # These transformations are mostly flattening the record.
+    record["timestamp"] = record["date"]["utc"]
+    record["latitude"] = record["coordinates"]["latitude"]
+    record["longitude"] = record["coordinates"]["longitude"]
+    del record["date"]
+    del record["coordinates"]
+    return record
