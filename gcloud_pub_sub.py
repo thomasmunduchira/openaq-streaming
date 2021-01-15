@@ -22,14 +22,13 @@ def publish_messages(
         dt_str = dt.strftime("%Y-%m-%d")
         print(f"Fetching records from {dt_str}.")
         records = stream_openaq.fetch_data(dt, use_cache)
-        print(f"{len(records)} records fetched for {dt_str}.")
         for record in records:
             # Data must be a bytestring
             record_str = json.dumps(record, separators=(",", ":"))  # compact encoding
             future = publisher.publish(topic_path, record_str.encode("UTF-8"))
             # Non-blocking. Allow the publisher client to batch multiple messages.
             future.add_done_callback(callback)
-        print(f"Added records from {dt_str} to batch queue.")
+        print(f"Added {len(records)} records from {dt_str} to batch queue.")
         time.sleep(pull_frequency)
 
 
@@ -60,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pull_frequency",
         type=int,
-        default=10,
+        default=5,
         help="how often to pull a day's worth of data from the OpenAQ API in seconds",
     )
     parser.add_argument(
@@ -77,13 +76,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_max_bytes",
         type=int,
-        default=1024,
+        default=10000,
         help="max amount of bytes before a batch of messages should be sent to the pubsub topic",
     )
     parser.add_argument(
         "--batch_max_latency",
         type=int,
-        default=10,
+        default=60,
         help="max amount of latency in seconds before a batch of messages should be sent to the pubsub topic",
     )
     args = parser.parse_args()

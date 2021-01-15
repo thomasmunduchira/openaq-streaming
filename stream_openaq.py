@@ -1,13 +1,22 @@
 import datetime
+import logging
 import os
 import requests
+from requests.adapters import HTTPAdapter
 import shelve
 import time
+from urllib3.util.retry import Retry
+
+# logging.basicConfig(level=logging.DEBUG)
 
 ENDPOINT = "https://api.openaq.org/v1/measurements"
-MAX_RESULTS_TO_FETCH = 10  # small limit for now
+MAX_RESULTS_TO_FETCH = 10000  # OpenAQ server side limit
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+http = requests.Session()
+retries = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+http.mount("https://", HTTPAdapter(max_retries=retries))
 
 # TODO: Enable sending diffs.
 def fetch_data(dt, use_cache):
@@ -16,8 +25,7 @@ def fetch_data(dt, use_cache):
         return fetch_from_cache(dt)
 
     date_str = dt.strftime("%Y-%m-%d")
-    # TODO: Add timeout/retries.
-    response = requests.get(
+    response = http.get(
         ENDPOINT,
         params={
             "country": "US",  # limit to US for now
