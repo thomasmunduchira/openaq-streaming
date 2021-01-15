@@ -1,6 +1,12 @@
 import argparse
-from google.cloud import pubsub_v1
 from datetime import date
+import json
+import time
+
+from dateutil.rrule import rrule, DAILY
+from google.cloud import pubsub_v1
+
+import stream_openaq
 
 # Resolve the publish future in a separate thread.
 def callback(future):
@@ -8,15 +14,20 @@ def callback(future):
     print(message_id)
 
 
-def publish_messages(publisher, topic_path):
-    for n in range(1, 10):
-        data = "Message number {}".format(n)
-        # Data must be a bytestring
-        data = data.encode("utf-8")
-        future = publisher.publish(topic_path, data)
-        # Non-blocking. Allow the publisher client to batch multiple messages.
-        future.add_done_callback(callback)
-    print(f"Added messages for {topic_path} to batch queue.")
+def publish_messages(publisher, topic_path, start_date, end_date, pull_frequency):
+    for dt in rrule(DAILY, dtstart=start_date, until=end_date):
+        dt_str = dt.strftime("%Y-%m-%d")
+        print(f"Fetching records from {dt_str}.")
+        records = stream_openaq.fetch_data(dt)
+        print(f"{len(records)} records fetched for {dt_str}.")
+        for record in records:
+            # Data must be a bytestring
+            data = json.dumps(record, separators=(",", ":"))  # compact encoding
+            future = publisher.publish(topic_path, data.encode("UTF-8"))
+            # Non-blocking. Allow the publisher client to batch multiple messages.
+            future.add_done_callback(callback)
+        print(f"Added records from {dt_str} to batch queue.")
+        time.sleep(pull_frequency)
 
 
 if __name__ == "__main__":
@@ -77,4 +88,6 @@ if __name__ == "__main__":
     publisher = pubsub_v1.PublisherClient(batch_settings)
     topic_path = publisher.topic_path(args.project_id, args.topic_id)
 
-    publish_messages(publisher, topic_path)
+    publish_messages(
+        publisher, topic_path, args.start_date, args.end_date, args.pull_frequency
+    )
