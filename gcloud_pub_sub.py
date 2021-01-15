@@ -9,21 +9,24 @@ from google.cloud import pubsub_v1
 import stream_openaq
 
 # Resolve the publish future in a separate thread.
+# TODO: figure out if we want to print anything here.
 def callback(future):
     message_id = future.result()
-    print(message_id)
+    # print(message_id)
 
 
-def publish_messages(publisher, topic_path, start_date, end_date, pull_frequency):
+def publish_messages(
+    publisher, topic_path, start_date, end_date, pull_frequency, use_cache
+):
     for dt in rrule(DAILY, dtstart=start_date, until=end_date):
         dt_str = dt.strftime("%Y-%m-%d")
         print(f"Fetching records from {dt_str}.")
-        records = stream_openaq.fetch_data(dt)
+        records = stream_openaq.fetch_data(dt, use_cache)
         print(f"{len(records)} records fetched for {dt_str}.")
         for record in records:
             # Data must be a bytestring
-            data = json.dumps(record, separators=(",", ":"))  # compact encoding
-            future = publisher.publish(topic_path, data.encode("UTF-8"))
+            record_str = json.dumps(record, separators=(",", ":"))  # compact encoding
+            future = publisher.publish(topic_path, record_str.encode("UTF-8"))
             # Non-blocking. Allow the publisher client to batch multiple messages.
             future.add_done_callback(callback)
         print(f"Added records from {dt_str} to batch queue.")
@@ -61,6 +64,11 @@ if __name__ == "__main__":
         help="how often to pull a day's worth of data from the OpenAQ API in seconds",
     )
     parser.add_argument(
+        "--use_cache",
+        action="store_true",
+        help="whether to use cached results or not",
+    )
+    parser.add_argument(
         "--batch_max_messages",
         type=int,
         default=1000,
@@ -89,5 +97,10 @@ if __name__ == "__main__":
     topic_path = publisher.topic_path(args.project_id, args.topic_id)
 
     publish_messages(
-        publisher, topic_path, args.start_date, args.end_date, args.pull_frequency
+        publisher,
+        topic_path,
+        args.start_date,
+        args.end_date,
+        args.pull_frequency,
+        args.use_cache,
     )
