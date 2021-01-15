@@ -5,6 +5,7 @@ import requests
 from requests.adapters import HTTPAdapter
 import shelve
 import time
+import traceback
 from urllib3.util.retry import Retry
 
 # logging.basicConfig(level=logging.DEBUG)
@@ -24,7 +25,7 @@ def fetch_data(dt, use_cache):
     if use_cache and os.path.isfile(filename(dt)):
         return fetch_from_cache(dt)
 
-    date_str = dt.strftime("%Y-%m-%d")
+    dt_str = dt.strftime("%Y-%m-%d")
     limit_reached = False
     page = 1
     results = []
@@ -34,17 +35,24 @@ def fetch_data(dt, use_cache):
             params={
                 "country": "US",  # limit to US for now
                 "has_geo": True,  # limit to records that have geographic info attached
-                "date_from": date_str,
-                "date_to": date_str,
+                "date_from": dt_str,
+                "date_to": dt_str,
                 "limit": MAX_RESULTS_TO_FETCH,
                 "page": page,
             },
         )
-        # TODO: catch errors.
-        response_json = response.json()
-        results += response_json["results"]
-        limit_reached = response_json["meta"]["found"] <= page * MAX_RESULTS_TO_FETCH
-        page += 1
+        try:
+            response_json = response.json()
+            results += response_json["results"]
+            limit_reached = (
+                response_json["meta"]["found"] <= page * MAX_RESULTS_TO_FETCH
+            )
+            page += 1
+        except Exception as e:
+            print(f"Invalid response received for {dt_str}, skipping rest of results.")
+            print(traceback.format_exc())
+            break
+
     records = persist_to_cache(dt, results)
     return records
 
